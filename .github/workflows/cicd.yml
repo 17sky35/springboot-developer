@@ -1,0 +1,51 @@
+#1. 워크플로우의 이름 지정
+name: CICD
+
+#2. 워크플로가 시작될 조건 지정
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 실행 환경 지정
+
+    # 4. 실행 스템 지정
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew clean build
+
+      #현재 시간 가져오기
+      - name: Get current time
+        uses: josStorer/get-current-time@v2.0.2
+        id: current-time
+        with:
+          format: YYYY-MM-DDTHH-mm-ss
+          utcOffset: "+09:00"
+      
+      #빌드된 파일을 저장하고 환경 변수를 설정하는 단계
+      - name: Set artifact
+        run: echo "artifact=$(ls ./build/libs)" >> $GITHUB_ENV
+
+      # AWS 일래스틱 빈스토크에 애플리케이션을 배포하는 단계이다.
+      #einaregilsson/beanstalk-deploy@v20 -> 액션을 이용하여 환경에 배포를 한다.
+      - name: Beanstalk Deploy
+        uses: einaregilsson/beanstalk-deploy@v20
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: springboot-developer2
+          environment_name: Springboot-developer2-env
+          version_label: github-action-${{steps.current-time.outputs.formattedTime}}
+          region: ap-northeast-2
+          deployment_package: ./build/libs/${{env.artifact}}
